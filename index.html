@@ -967,9 +967,17 @@ function selectCanal(idx) {
 }
 
 document.addEventListener('click', e => {
+  // Stäng dropdown om man klickar utanför
   if (!document.getElementById('canal-dropdown').contains(e.target)) {
     const menu = document.getElementById('canal-dropdown-menu');
     if (menu) menu.style.display = 'none';
+  }
+  
+  // Stäng modalen om man klickar på bakgrunden (overlayen)
+  const modalOverlay = document.getElementById('add-add-boat-modal'); // OBS: id är 'add-boat-modal' i din HTML
+  const modal = document.getElementById('add-boat-modal');
+  if (e.target === modal) {
+    closeAddBoatModal();
   }
 });
 
