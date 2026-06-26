@@ -1,0 +1,1007 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bropassage — Båttrafiköversikt</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --navy:   #0D1B2A;
+      --deep:   #162637;
+      --steel:  #2E6E9E;
+      --water:  #1A4A6E;
+      --fog:    #E8EDF2;
+      --mist:   #B8C8D8;
+      --amber:  #F5A623;
+      --green:  #3DAA6E;
+      --red:    #E05252;
+      --white:  #F0F4F8;
+      --mono:   'Space Mono', monospace;
+      --sans:   'Inter', sans-serif;
+    }
+
+    body {
+      background: var(--navy);
+      color: var(--fog);
+      color-scheme: dark;
+      font-family: var(--sans);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+      overflow-y: auto;
+    }
+
+    /* ── Header ── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 24px;
+      background: var(--deep);
+      border-bottom: 1px solid var(--water);
+    }
+    .logo {
+      font-family: var(--mono);
+      font-size: 13px;
+      letter-spacing: 0.12em;
+      color: var(--mist);
+      text-transform: uppercase;
+    }
+    .logo span { color: var(--steel); }
+    .clock {
+      font-family: var(--mono);
+      font-size: 20px;
+      color: var(--white);
+      letter-spacing: 0.06em;
+    }
+    .header-actions { display: flex; align-items: center; gap: 16px; }
+
+    button {
+      font-family: var(--sans);
+      font-size: 13px;
+      font-weight: 500;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      padding: 8px 14px;
+      transition: opacity 0.15s, transform 0.1s;
+    }
+    button:active { transform: scale(0.97); }
+    .btn-primary   { background: var(--steel); color: #fff; }
+    .btn-secondary { background: rgba(46,110,158,0.2); color: var(--mist); border: 1px solid var(--water); }
+    .btn-danger    { background: rgba(224,82,82,0.15); color: var(--red); border: 1px solid rgba(224,82,82,0.3); }
+    .btn-green     { background: var(--green); color: #fff; }
+    button:hover   { opacity: 0.85; }
+
+    /* ── Elegant Sound Toggle ── */
+    .sound-control {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      user-select: none;
+    }
+    .sound-icon {
+      font-size: 14px;
+      opacity: 0.4;
+      transition: opacity 0.2s ease;
+    }
+    .sound-icon.active {
+      opacity: 1;
+    }
+    .sound-switch {
+      position: relative;
+      display: inline-block;
+      width: 44px;
+      height: 24px;
+    }
+    .sound-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .sound-slider {
+      position: absolute;
+      cursor: pointer;
+      inset: 0;
+      background-color: rgba(255, 255, 255, 0.1);
+      border: 1px solid var(--water);
+      transition: background-color 0.25s ease, border-color 0.25s ease;
+      border-radius: 24px;
+    }
+    .sound-slider:before {
+      position: absolute;
+      content: "";
+      height: 16px;
+      width: 16px;
+      left: 3px;
+      bottom: 3px;
+      background-color: var(--mist);
+      transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.25s ease;
+      border-radius: 50%;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    }
+    .sound-switch input:checked + .sound-slider {
+      background-color: rgba(61, 170, 110, 0.2);
+      border-color: var(--green);
+    }
+    .sound-switch input:checked + .sound-slider:before {
+      transform: translateX(20px);
+      background-color: var(--green);
+    }
+    .sound-switch input:focus-visible + .sound-slider {
+      outline: 2px solid var(--steel);
+      outline-offset: 2px;
+    }
+
+    /* ── Canal Map ── */
+    #canal-container {
+      padding: 32px 24px 24px;
+      overflow-x: auto;
+      min-height: 200px;
+    }
+
+    /* svg-wrapper is the positioning root for hit areas and boat tokens */
+    #svg-wrapper {
+      position: relative;
+      min-width: 700px;
+    }
+
+    #canal-svg {
+      display: block;
+      width: 100%;
+      height: 160px;
+    }
+
+    /* ── Boats layer ── */
+    #boats-layer {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%;
+      min-height: 160px;
+      pointer-events: none;
+      overflow: visible;
+    }
+
+    /* ── Segments (clickable for adding boats) ── */
+    .segment-hit {
+      position: absolute;
+      top: calc(var(--extra-top, 0px) + 50px);
+      height: 60px;
+      cursor: pointer;
+      background: transparent;
+      border-radius: 4px;
+      transition: background 0.15s;
+      pointer-events: all;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .segment-hit:hover { background: rgba(46,110,158,0.12); }
+    .segment-add-hint {
+      font-size: 11px;
+      color: var(--steel);
+      opacity: 0;
+      transition: opacity 0.15s ease;
+      user-select: none;
+      font-family: var(--mono);
+      letter-spacing: 0.05em;
+    }
+    .segment-hit:hover .segment-add-hint { opacity: 1; }
+
+    /* ── Boat tokens ── */
+    .boat-token {
+      position: absolute;
+      transform: translateX(-50%);
+      pointer-events: all;
+      cursor: default;
+      z-index: 10;
+    }
+    .boat-bubble {
+      background: var(--deep);
+      border: 2px solid var(--steel);
+      border-radius: 6px;
+      padding: 3px 7px 3px 6px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+      white-space: nowrap;
+    }
+    .boat-info { display: flex; align-items: baseline; gap: 5px; }
+    .boat-name {
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--white);
+      letter-spacing: 0.03em;
+    }
+    .boat-timer {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--amber);
+    }
+    .boat-timer.urgent { color: var(--red); }
+    .boat-timer.arrived { color: var(--green); }
+
+    @keyframes pulse-text {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    .boat-bubble.urgent-border { border-color: var(--red); box-shadow: 0 0 8px rgba(224,82,82,0.35); }
+    .boat-bubble.arrived-border { border-color: var(--green); box-shadow: 0 0 8px rgba(61,170,110,0.35); }
+
+    .boat-actions { display: flex; gap: 3px; }
+    .btn-micro {
+      padding: 2px 5px;
+      font-size: 9px;
+      border-radius: 3px;
+    }
+    .btn-advance { background: var(--green); color: #fff; }
+    .btn-remove  { background: rgba(224,82,82,0.15); color: var(--red); border: 1px solid rgba(224,82,82,0.3); }
+
+    /* ── Alerts panel ── */
+    #alerts-panel {
+      margin: 0 24px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      overflow-y: auto;
+    }
+    .alert-item {
+      background: rgba(245,166,35,0.08);
+      border: 1px solid rgba(245,166,35,0.3);
+      border-left: 3px solid var(--amber);
+      border-radius: 6px;
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .alert-item.arrived {
+      background: rgba(61,170,110,0.08);
+      border-color: rgba(61,170,110,0.3);
+      border-left-color: var(--green);
+    }
+    @keyframes slide-in {
+      from { transform: translateX(-12px); opacity: 0; }
+      to   { transform: translateX(0);    opacity: 1; }
+    }
+    .alert-text { font-size: 13px; color: var(--fog); }
+    .alert-text strong { font-family: var(--mono); font-size: 12px; color: var(--white); }
+    .alert-time { font-family: var(--mono); font-size: 11px; color: var(--mist); }
+
+    /* ── Modals ── */
+    .modal-overlay {
+      position: fixed; inset: 0;
+      background: rgba(8,14,22,0.75);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 100;
+      backdrop-filter: blur(4px);
+    }
+    .modal-overlay.hidden { display: none; }
+    .modal {
+      background: var(--deep);
+      border: 1px solid var(--water);
+      border-radius: 12px;
+      padding: 28px;
+      width: 360px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+    }
+    .modal h2 {
+      font-family: var(--mono);
+      font-size: 14px;
+      letter-spacing: 0.08em;
+      color: var(--white);
+      margin-bottom: 20px;
+      text-transform: uppercase;
+    }
+    .form-group { margin-bottom: 16px; }
+    label { display: block; font-size: 12px; color: var(--mist); margin-bottom: 6px; font-weight: 500; }
+    input, select {
+      width: 100%;
+      background: var(--navy);
+      border: 1px solid var(--water);
+      border-radius: 6px;
+      color: var(--white);
+      padding: 9px 12px;
+      font-size: 14px;
+      font-family: var(--sans);
+      outline: none;
+    }
+    input:focus, select:focus { border-color: var(--steel); }
+    select option { background: var(--navy); }
+    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 8px; }
+
+    /* ── No boats placeholder ── */
+    #no-boats {
+      text-align: center;
+      padding: 16px;
+      font-size: 13px;
+      color: var(--mist);
+      font-family: var(--mono);
+      letter-spacing: 0.04em;
+      opacity: 0.7;
+    }
+
+    /* ── Notification flash ── */
+    #notif-flash {
+      position: fixed;
+      top: 70px; right: 24px;
+      background: var(--amber);
+      color: var(--navy);
+      font-family: var(--mono);
+      font-size: 13px;
+      font-weight: 700;
+      padding: 12px 18px;
+      border-radius: 8px;
+      box-shadow: 0 4px 20px rgba(245,166,35,0.4);
+      z-index: 200;
+      transform: translateY(-8px);
+      opacity: 0;
+      transition: opacity 0.25s, transform 0.25s;
+      pointer-events: none;
+      max-width: 320px;
+    }
+    #notif-flash.show { opacity: 1; transform: translateY(0); }
+
+    /* ── Segment label ── */
+    .seg-time-label {
+      font-family: var(--mono);
+      font-size: 9px;
+      fill: var(--mist);
+      opacity: 0.6;
+      text-anchor: middle;
+    }
+
+    /* ── Direction badge ── */
+    .dir-badge {
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 700;
+      padding: 1px 5px;
+      border-radius: 3px;
+      letter-spacing: 0.06em;
+      flex-shrink: 0;
+    }
+    .dir-east { background: rgba(61,170,110,0.18); color: #5DCFA0; border: 1px solid rgba(61,170,110,0.35); }
+    .dir-west { background: rgba(245,166,35,0.15); color: #F5B84A; border: 1px solid rgba(245,166,35,0.3); }
+
+    /* Direction toggle in modal */
+    .dir-toggle { display: flex; gap: 8px; }
+    .dir-option {
+      flex: 1; padding: 10px 8px; border-radius: 6px;
+      background: var(--navy); border: 2px solid var(--water);
+      color: var(--mist); font-family: var(--mono); font-size: 12px;
+      cursor: pointer; text-align: center; letter-spacing: 0.05em;
+      transition: border-color 0.15s, color 0.15s, background 0.15s;
+      user-select: none;
+    }
+    .dir-option.selected-east { border-color: #3DAA6E; color: #5DCFA0; background: rgba(61,170,110,0.1); }
+    .dir-option.selected-west { border-color: var(--amber); color: #F5B84A; background: rgba(245,166,35,0.08); }
+
+    .dd-option {
+      padding: 9px 14px;
+      font-size: 13px;
+      font-family: var(--sans);
+      color: var(--mist);
+      cursor: pointer;
+      transition: background 0.1s, color 0.1s;
+    }
+    .dd-option:hover { background: var(--mist); color: var(--navy); }
+    .dd-option.active { background: var(--steel); color: #fff; }
+  </style>
+</head>
+<body>
+
+<audio id="alertSound">
+  <source src="alert.mp3" type="audio/mpeg">
+</audio>
+
+<header>
+  <div class="logo"><span>⚓</span> Bropassage</div>
+  <div class="clock" id="clock">--:--:--</div>
+  <div class="header-actions">
+    <div class="sound-control">
+      <span class="sound-icon" id="sound-off-icon">🔈</span>
+      <label class="sound-switch">
+        <input type="checkbox" id="soundOn" onchange="updateSoundIconState()">
+        <span class="sound-slider"></span>
+      </label>
+      <span class="sound-icon" id="sound-on-icon">🔊</span>
+    </div>
+
+    <div id="canal-dropdown" style="position:relative;">
+      <button id="canal-dropdown-btn" onclick="toggleDropdown()" style="background:rgba(46,110,158,0.2);border:1px solid var(--water);color:var(--mist);font-family:var(--sans);font-size:13px;padding:7px 12px;border-radius:6px;cursor:pointer;display:flex;align-items:center;gap:8px;min-width:110px;justify-content:space-between;">
+        <span id="canal-dropdown-label">Lyrestad</span>
+        <span style="font-size:9px;opacity:0.6;">▼</span>
+      </button>
+      <div id="canal-dropdown-menu" style="display:none;position:absolute;top:calc(100% + 4px);right:0;background:var(--deep);border:1px solid var(--water);border-radius:6px;overflow:hidden;z-index:50;min-width:130px;box-shadow:0 8px 24px rgba(0,0,0,0.4);">
+        <div class="dd-option" data-value="0" onclick="selectCanal(0)">Lyrestad</div>
+        <div class="dd-option" data-value="1" onclick="selectCanal(1)">Töreboda</div>
+      </div>
+    </div>
+    <button class="btn-primary" onclick="openAddBoatModal()">+ Lägg till båt</button>
+  </div>
+</header>
+
+<div id="canal-container">
+  <div id="svg-wrapper">
+    <svg id="canal-svg" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet"></svg>
+    <div id="boats-layer"></div>
+  </div>
+</div>
+
+<div id="alerts-panel"></div>
+
+<div id="no-boats">Klicka på ett segment för att lägga till en båt</div>
+
+<div class="modal-overlay hidden" id="add-boat-modal">
+  <div class="modal">
+    <h2>Lägg till båt</h2>
+    <div class="form-group">
+      <label>Båtnamn / Anrop</label>
+      <input type="text" id="boat-name-input" placeholder="t.ex. M/S Bellevue" />
+    </div>
+    <div class="form-group">
+      <label>Riktning</label>
+      <div class="dir-toggle">
+        <div class="dir-option" id="dir-west" onclick="selectDir('west')">← VÄSTER</div>
+        <div class="dir-option selected-east" id="dir-east" onclick="selectDir('east')">→ ÖSTER</div>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Nuvarande position</label>
+      <select id="boat-segment-select" onchange="document.getElementById('boat-minutes-input').value = getSegmentTime(parseInt(this.value))"></select>
+    </div>
+    <div class="form-group">
+      <label>Tid till nästa bro (minuter)</label>
+      <input type="number" id="boat-minutes-input" value="15" min="0.1" max="999" step="0.1" />
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeAddBoatModal()">Avbryt</button>
+      <button class="btn-primary" onclick="confirmAddBoat()">Lägg till</button>
+    </div>
+  </div>
+</div>
+
+<div id="notif-flash"></div>
+
+<script>
+// ─────────────────────────────────────────────
+// STATE
+// ─────────────────────────────────────────────
+const CANAL_CONFIGS = [
+  ['Norrkvarn', 'E20', 'Lyrestad', 'Järnvägen', 'Rogstorp', '7-8an'],
+  ['Stång', 'Rotkilen', 'Järnvägen', 'Töreboda', 'Gastorp', 'Lövsäng', 'Hajstorp'],
+];
+
+const SEGMENT_TIMES_CONFIG = [
+  // Kanal 0: Lyrestad (4 segment)
+  // Norrkvarn->E20, E20->Lyrestad, Lyrestad->Järnvägen, Järnvägen->Rogstorp Järnvägen->7-8an
+  [12, 2, 2, 15, 15], 
+
+  // Kanal 1: Töreboda (6 segment)
+  // Stång->Rotkilen, Rotkilen->Järnvägen, Järnvägen->Töreboda, Töreboda->Gastorp, Gastorp->Lövsäng, Lövsäng->Hajstorp
+  [40, 10, 1, 10, 10, 20] 
+];
+
+/**
+ * Hämtar standardtid för ett givet segment baserat på aktiv kanal.
+ * @param {number} segIdx - Index för segmentet
+ * @return {number} Tid i minuter (standardvärde 15 om index saknas)
+ */
+function getSegmentTime(segIdx) {
+  const canalTimes = SEGMENT_TIMES_CONFIG[currentCanalIdx];
+  if (canalTimes && canalTimes[segIdx] !== undefined) {
+    return canalTimes[segIdx];
+  }
+  return 15; // Fallback om något blir fel
+}
+
+function makeBridges(names) {
+  return names.map(name => ({ id: uid(), name }));
+}
+
+let bridges = makeBridges(CANAL_CONFIGS[0]);
+
+let boats = [];         // { id, name, dir, segIdx, startAt, endAt, alertedArrival }
+                        // dir: 'east' (left→right, →) or 'west' (right→left, ←)
+let addingToSegment = null;
+let currentDir = 'east'; // direction chosen in modal
+let alerts = [];
+
+function uid() {
+  return Math.random().toString(36).slice(2, 9);
+}
+
+function segmentCount() { return bridges.length - 1; }
+function segmentLabel(i, dir = 'east') {
+  return dir === 'east'
+    ? `${bridges[i].name} → ${bridges[i+1].name}`
+    : `${bridges[i+1].name} → ${bridges[i].name}`;
+}
+
+// Helper to make the speaker icons glow dynamically when toggled
+function updateSoundIconState() {
+  const isChecked = document.getElementById('soundOn').checked;
+  document.getElementById('sound-on-icon').classList.toggle('active', isChecked);
+  document.getElementById('sound-off-icon').classList.toggle('active', !isChecked);
+}
+
+// ─────────────────────────────────────────────
+// PERSISTENCE (localStorage)
+// ─────────────────────────────────────────────
+function save() {
+  try {
+    localStorage.setItem('bropassage_canal', String(currentCanalIdx));
+    localStorage.setItem('bropassage_boats', JSON.stringify(boats));
+  } catch(e) {}
+}
+function load() {
+  try {
+    const ci = localStorage.getItem('bropassage_canal');
+    const bo = localStorage.getItem('bropassage_boats');
+    if (ci) {
+      const idx = parseInt(ci);
+      currentCanalIdx = idx;
+      bridges = makeBridges(CANAL_CONFIGS[idx]);
+    }
+    if (bo) boats = JSON.parse(bo);
+  } catch(e) {}
+}
+
+// ─────────────────────────────────────────────
+// CLOCK
+// ─────────────────────────────────────────────
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent =
+    String(now.getHours()).padStart(2,'0') + ':' +
+    String(now.getMinutes()).padStart(2,'0') + ':' +
+    String(now.getSeconds()).padStart(2,'0');
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ─────────────────────────────────────────────
+// CANAL SVG RENDERER
+// ─────────────────────────────────────────────
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const PAD_L = 40, PAD_R = 40, SVG_H = 160;
+const RIVER_Y = 80, RIVER_H = 32;
+
+function renderCanal() {
+  const svg = document.getElementById('canal-svg');
+  const boatsLayer = document.getElementById('boats-layer');
+  const wrapper = document.getElementById('svg-wrapper');
+  const W = wrapper.getBoundingClientRect().width || 900;
+  svg.setAttribute('viewBox', `0 0 ${W} ${SVG_H}`);
+
+  svg.innerHTML = '';
+  boatsLayer.innerHTML = '';
+
+  const n = bridges.length;
+  const usableW = W - PAD_L - PAD_R;
+  const xOf = i => PAD_L + (usableW / (n - 1)) * i;
+
+  // River body (gradient)
+  const defs = el('defs');
+  const grad = el('linearGradient', { id:'riverGrad', x1:'0%', y1:'0%', x2:'0%', y2:'100%' });
+  grad.appendChild(el('stop', { offset:'0%',   'stop-color':'#1A4A6E', 'stop-opacity':'0.9' }));
+  grad.appendChild(el('stop', { offset:'100%', 'stop-color':'#0D1B2A', 'stop-opacity':'0.9' }));
+  defs.appendChild(grad);
+  svg.appendChild(defs);
+
+  // River rect
+  svg.appendChild(el('rect', {
+    x: PAD_L, y: RIVER_Y - RIVER_H/2,
+    width: usableW, height: RIVER_H,
+    rx: RIVER_H/2, fill: 'url(#riverGrad)',
+    stroke: '#2E6E9E', 'stroke-width': '1'
+  }));
+
+  // Lane divider (dashed centre line)
+  svg.appendChild(el('line', {
+    x1: PAD_L, y1: RIVER_Y, x2: W - PAD_R, y2: RIVER_Y,
+    stroke: '#2E6E9E', 'stroke-width': '1', 'stroke-opacity': '0.4',
+    'stroke-dasharray': '4 8'
+  }));
+
+  // East label
+  const eastLbl = el('text', { x: PAD_L - 6, y: RIVER_Y - 4, 'text-anchor': 'end', fill: '#5DCFA0', 'font-size': '8', 'font-family': 'Space Mono, monospace', 'font-weight': '700', opacity: '0.7' });
+  eastLbl.textContent = '→ Ö';
+  svg.appendChild(eastLbl);
+
+  // West label
+  const westLbl = el('text', { x: PAD_L - 6, y: RIVER_Y + 12, 'text-anchor': 'end', fill: '#F5B84A', 'font-size': '8', 'font-family': 'Space Mono, monospace', 'font-weight': '700', opacity: '0.7' });
+  westLbl.textContent = '← V';
+  svg.appendChild(westLbl);
+
+  // Subtle flow lines
+  for (let line = 0; line < 3; line++) {
+    const ly = RIVER_Y - 8 + line * 8;
+    svg.appendChild(el('line', {
+      x1: PAD_L + 10, y1: ly, x2: W - PAD_R - 10, y2: ly,
+      stroke: '#2E6E9E', 'stroke-width': '0.5', 'stroke-opacity': '0.3',
+      'stroke-dasharray': '6 10'
+    }));
+  }
+
+// Segment hit areas (Skapa bara om de inte redan finns)
+  let existingHits = wrapper.querySelectorAll('.segment-hit');
+  if (existingHits.length === 0) {
+    for (let i = 0; i < n - 1; i++) {
+      const x1 = xOf(i), x2 = xOf(i+1);
+      const segW = x2 - x1;
+
+      const hitDiv = document.createElement('div');
+      hitDiv.className = 'segment-hit';
+      hitDiv.style.left = (x1 + 8) + 'px';
+      hitDiv.style.width = (segW - 16) + 'px';
+      hitDiv.dataset.seg = i;
+      hitDiv.innerHTML = `<span class="segment-add-hint">+ båt</span>`;
+      hitDiv.addEventListener('click', () => openAddBoatModal(i));
+      wrapper.appendChild(hitDiv);
+    }
+  } else {
+    // Om de redan finns, uppdatera bara deras positioner ifall fönstret ändrat storlek
+    existingHits.forEach((hitDiv, i) => {
+      const x1 = xOf(i), x2 = xOf(i+1);
+      const segW = x2 - x1;
+      hitDiv.style.left = (x1 + 8) + 'px';
+      hitDiv.style.width = (segW - 16) + 'px';
+      hitDiv.style.top = `calc(var(--extra-top, 0px) + 50px)`;
+      
+      // Uppdatera texten så att den vänder rätt (Öster/Väster) baserat på vald riktning i dropdown
+      const hint = hitDiv.querySelector('.segment-add-hint');
+      if (hint) hint.textContent = '+ båt';
+    });
+  }
+
+  // Bridges
+  bridges.forEach((br, i) => {
+    const x = xOf(i);
+    const gateH = RIVER_H + 14;
+    const gateY = RIVER_Y - gateH/2;
+
+    svg.appendChild(el('rect', {
+      x: x - 6, y: gateY, width: 12, height: gateH,
+      rx: 2, fill: '#2E6E9E', opacity: '0.9'
+    }));
+    svg.appendChild(el('rect', {
+      x: x - 3, y: gateY + 4, width: 6, height: gateH - 8,
+      rx: 1, fill: '#0D1B2A', opacity: '0.7'
+    }));
+
+    const labelBg = el('rect', {
+      x: x - 36, y: RIVER_Y + RIVER_H/2 + 24, width: 72, height: 16,
+      rx: 3, fill: '#162637', opacity: '0.9'
+    });
+    svg.appendChild(labelBg);
+    svg.appendChild(elText('bridge-label', x, RIVER_Y + RIVER_H/2 + 35, br.name));
+  });
+
+  renderBoats(W, xOf);
+  updateNoBoatsHint();
+}
+
+function renderBoats(W, xOf) {
+  const boatsLayer = document.getElementById('boats-layer');
+  boatsLayer.innerHTML = '';
+  const n = bridges.length;
+
+  const TOKEN_H = 22; 
+  const RIVER_CENTRE = 80;
+  const GAP = 2;
+
+  const slotCount = { east: {}, west: {} };
+
+  boats.forEach(boat => {
+    const i = boat.segIdx;
+    if (i < 0 || i >= n - 1) return;
+
+    const x1 = xOf(i), x2 = xOf(i+1);
+    const now = Date.now();
+    const remaining = boat.endAt - now;
+    const total = boat.endAt - boat.startAt;
+    const rawProgress = Math.max(0, Math.min(1, 1 - remaining / total));
+
+    const isEast = boat.dir !== 'west';
+    const progress = isEast ? rawProgress : (1 - rawProgress);
+    const bx = x1 + (x2 - x1) * progress;
+
+    const dir = isEast ? 'east' : 'west';
+    if (!slotCount[dir][i]) slotCount[dir][i] = 0;
+    const slot = slotCount[dir][i]++;
+
+    const LANE_BASE_EAST = RIVER_CENTRE - 18; 
+    const LANE_BASE_WEST = RIVER_CENTRE + 2;  
+    const tokenTop = isEast
+      ? LANE_BASE_EAST - slot * (TOKEN_H + GAP)
+      : LANE_BASE_WEST + slot * (TOKEN_H + GAP);
+
+    const isUrgent = remaining < 120000 && remaining > 0;
+    const isArrived = remaining <= 0;
+
+    const token = document.createElement('div');
+    token.className = 'boat-token';
+    token.style.left = bx + 'px';
+    token.style.top = tokenTop + 'px';
+
+    let timerTxt = '';
+    if (isArrived) {
+      timerTxt = `<span class="boat-timer arrived">ANLÄNT</span>`;
+    } else {
+      const mins = Math.floor(remaining / 60000);
+      const secs = Math.floor((remaining % 60000) / 1000);
+      timerTxt = `<span class="boat-timer ${isUrgent ? 'urgent' : ''}">${mins}:${String(secs).padStart(2,'0')}</span>`;
+    }
+
+    const borderClass = isArrived ? 'arrived-border' : isUrgent ? 'urgent-border' : '';
+    const dirBorder = isEast ? 'border-color:#5DCFA0' : 'border-color:#F5B84A';
+    const nextBridgeIdx = isEast ? i + 1 : i;
+
+    token.innerHTML = `
+      <div class="boat-bubble ${borderClass}" style="${isArrived || isUrgent ? '' : dirBorder}">
+        <div class="boat-info">
+          <span class="boat-name">${escHtml(boat.name)}</span>
+          ${timerTxt}
+        </div>
+        <div class="boat-actions">
+          ${isArrived ? `<button class="button btn-micro btn-advance" onclick="advanceBoat('${boat.id}')">→</button>` : ''}
+          <button class="button btn-micro btn-remove" onclick="removeBoat('${boat.id}')">✕</button>
+        </div>
+      </div>`;
+    boatsLayer.appendChild(token);
+
+    if (isArrived && !boat.alertedArrival) {
+      boat.alertedArrival = true;
+      triggerAlert(boat, nextBridgeIdx);
+    }
+  });
+
+  const maxEastSlots = Math.max(0, ...Object.values(slotCount.east));
+  const maxWestSlots = Math.max(0, ...Object.values(slotCount.west));
+  const extraUp   = maxEastSlots > 1 ? (maxEastSlots - 1) * (TOKEN_H + GAP) : 0;
+  const extraDown = maxWestSlots > 1 ? (maxWestSlots - 1) * (TOKEN_H + GAP) : 0;
+  const wrapper = document.getElementById('svg-wrapper');
+  wrapper.style.paddingBottom = extraDown + 'px';
+  wrapper.style.paddingTop    = extraUp   + 'px';
+  boatsLayer.style.top = extraUp + 'px';
+  wrapper.style.setProperty('--extra-top', extraUp + 'px');
+}
+
+function el(tag, attrs = {}) {
+  const e = document.createElementNS(SVG_NS, tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  return e;
+}
+function elText(cls, x, y, txt) {
+  const t = el('text', { x, y, 'text-anchor': 'middle', 'font-family': 'Space Mono, monospace' });
+  if (cls === 'bridge-label') {
+    t.setAttribute('fill', '#B8C8D8');
+    t.setAttribute('font-size', '10');
+    t.setAttribute('font-weight', '700');
+  } else {
+    t.setAttribute('fill', '#B8C8D8');
+    t.setAttribute('font-size', '9');
+    t.setAttribute('opacity', '0.6');
+  }
+  t.textContent = txt;
+  return t;
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function updateNoBoatsHint() {
+  document.getElementById('no-boats').style.display = boats.length ? 'none' : 'block';
+}
+
+// ─────────────────────────────────────────────
+// BOATS
+// ─────────────────────────────────────────────
+function openAddBoatModal(segIdx = 0) {
+  addingToSegment = segIdx;
+  const sel = document.getElementById('boat-segment-select');
+  sel.innerHTML = '';
+  for (let i = 0; i < segmentCount(); i++) {
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = segmentLabel(i, currentDir);
+    if (i === segIdx) opt.selected = true;
+    sel.appendChild(opt);
+  }
+  document.getElementById('boat-minutes-input').value = getSegmentTime(segIdx);
+  document.getElementById('add-boat-modal').classList.remove('hidden');
+  document.getElementById('boat-name-input').focus();
+}
+function closeAddBoatModal() {
+  document.getElementById('add-boat-modal').classList.add('hidden');
+  currentDir = 'east';
+  document.getElementById('dir-east').className = 'dir-option selected-east';
+  document.getElementById('dir-west').className = 'dir-option';
+}
+function selectDir(dir) {
+  currentDir = dir;
+  document.getElementById('dir-east').className = 'dir-option' + (dir === 'east' ? ' selected-east' : '');
+  document.getElementById('dir-west').className = 'dir-option' + (dir === 'west' ? ' selected-west' : '');
+  const sel = document.getElementById('boat-segment-select');
+  const prev = sel.value;
+  sel.innerHTML = '';
+  for (let i = 0; i < segmentCount(); i++) {
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = segmentLabel(i, dir);
+    if (String(i) === String(prev)) opt.selected = true;
+    sel.appendChild(opt);
+  }
+}
+
+function confirmAddBoat() {
+  const name = document.getElementById('boat-name-input').value.trim() || 'Båt ' + (boats.length + 1);
+  const segIdx = parseInt(document.getElementById('boat-segment-select').value);
+  const mins = parseFloat(document.getElementById('boat-minutes-input').value) || 15;
+  const now = Date.now();
+  boats.push({ id: uid(), name, dir: currentDir, segIdx, startAt: now, endAt: now + mins * 60000, alertedArrival: false });
+  closeAddBoatModal();
+  document.getElementById('boat-name-input').value = '';
+  document.getElementById('boat-minutes-input').value = 15;
+  save();
+  renderCanal();
+}
+
+function advanceBoat(id) {
+  const boat = boats.find(b => b.id === id);
+  if (!boat) return;
+  const isEast = boat.dir !== 'west';
+
+  const atEnd = isEast ? boat.segIdx >= segmentCount() - 1 : boat.segIdx <= 0;
+  if (atEnd) {
+    boats = boats.filter(b => b.id !== id);
+    showNotif(`⛵ ${boat.name} har lämnat kanalen`);
+  } else {
+    boat.segIdx = isEast ? boat.segIdx + 1 : boat.segIdx - 1;
+    const nextBridgeName = isEast
+      ? (bridges[boat.segIdx + 1]?.name ?? 'slutet')
+      : (bridges[boat.segIdx]?.name ?? 'slutet');
+    const defaultTimeForNextSegment = getSegmentTime(boat.segIdx);
+    const mins = parseInt(prompt(`Tid till ${nextBridgeName} (minuter)?`, String(defaultTimeForNextSegment))) || defaultTimeForNextSegment;
+    console.log(boat.segIdx);
+    const now = Date.now();
+    boat.startAt = now;
+    boat.endAt = now + mins * 60000;
+    boat.alertedArrival = false;
+  }
+  save();
+  renderCanal();
+}
+
+function removeBoat(id) {
+  boats = boats.filter(b => b.id !== id);
+  save();
+  renderCanal();
+}
+
+// ─────────────────────────────────────────────
+// ALERTS
+// ─────────────────────────────────────────────
+function triggerAlert(boat, bridgeIdx) {
+  const bridgeName = bridges[bridgeIdx]?.name ?? '?';
+  const dirArrow = boat.dir !== 'west' ? '→ Ö' : '← V';
+  const msg = { id: uid(), boat: boat.name, bridge: bridgeName, dir: dirArrow, time: new Date() };
+  const alertSound = document.getElementById('alertSound');
+  const soundOn = document.getElementById('soundOn');
+  if (soundOn.checked) {
+    alertSound.volume = 0.5;
+    alertSound.play();
+  }
+  alerts.unshift(msg);
+  if (alerts.length > 5) alerts.pop();
+  renderAlerts();
+  showNotif(`⚓ ${boat.name} ankommer till ${bridgeName}`);
+  if ('Notification' in window && Notification.permission === 'granted') {
+    new Notification(`Bropassage — ${boat.name}`, { body: `Ankommer till ${bridgeName}`, icon: '⚓' });
+  }
+}
+
+function renderAlerts() {
+  const panel = document.getElementById('alerts-panel');
+  panel.innerHTML = '';
+  alerts.forEach(a => {
+    const d = document.createElement('div');
+    d.className = 'alert-item arrived';
+    d.innerHTML = `
+      <div class="alert-text">⚓ <strong>${escHtml(a.boat)}</strong> ankommer till <strong>${escHtml(a.bridge)}</strong></div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div class="alert-time">${a.time.getHours()}:${String(a.time.getMinutes()).padStart(2,'0')}</div>
+        <button onclick="dismissAlert('${a.id}')" style="background:none;border:none;color:var(--mist);font-size:14px;cursor:pointer;padding:0;line-height:1;opacity:0.5;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.5">✕</button>
+      </div>`;
+    panel.appendChild(d);
+  });
+}
+
+function dismissAlert(id) {
+  alerts = alerts.filter(a => a.id !== id);
+  renderAlerts();
+}
+
+function showNotif(msg) {
+  const el = document.getElementById('notif-flash');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 3500);
+}
+
+// ─────────────────────────────────────────────
+// BRIDGE EDITOR
+// ─────────────────────────────────────────────
+let currentCanalIdx = 0;
+
+function toggleDropdown() {
+  const menu = document.getElementById('canal-dropdown-menu');
+  menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+}
+
+function selectCanal(idx) {
+  currentCanalIdx = idx;
+  bridges = makeBridges(CANAL_CONFIGS[idx]);
+  boats = [];
+  document.querySelectorAll('.segment-hit').forEach(e => e.remove());
+  document.getElementById('canal-dropdown-label').textContent = CANAL_CONFIGS[idx][0].split('–')[0] + (idx === 0 ? 'Lyrestad' : 'Töreboda');
+  const labels = ['Lyrestad', 'Töreboda'];
+  document.getElementById('canal-dropdown-label').textContent = labels[idx];
+  document.querySelectorAll('.dd-option').forEach(el => {
+    el.classList.toggle('active', parseInt(el.dataset.value) === idx);
+  });
+  document.getElementById('canal-dropdown-menu').style.display = 'none';
+  save();
+  renderCanal();
+}
+
+document.addEventListener('click', e => {
+  if (!document.getElementById('canal-dropdown').contains(e.target)) {
+    const menu = document.getElementById('canal-dropdown-menu');
+    if (menu) menu.style.display = 'none';
+  }
+});
+
+// ─────────────────────────────────────────────
+// MAIN LOOP
+// ─────────────────────────────────────────────
+let lastRender = 0;
+function tick() {
+  const now = Date.now();
+  if (now - lastRender > 500) {
+    lastRender = now;
+    renderCanal();
+    renderAlerts();
+  }
+  requestAnimationFrame(tick);
+}
+
+window.addEventListener('resize', () => renderCanal());
+
+if ('Notification' in window && Notification.permission === 'default') {
+  Notification.requestPermission();
+}
+
+// Init
+load();
+document.querySelectorAll('.dd-option').forEach(el => {
+  el.classList.toggle('active', parseInt(el.dataset.value) === currentCanalIdx);
+});
+document.getElementById('canal-dropdown-label').textContent = ['Lyrestad', 'Töreboda'][currentCanalIdx];
+updateSoundIconState(); // Se till att ljudikonerna har rätt opacitet från start
+renderCanal();
+tick();
+</script>
+</body>
+</html>
