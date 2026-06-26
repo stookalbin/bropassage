@@ -268,6 +268,11 @@
       border-color: rgba(61,170,110,0.3);
       border-left-color: var(--green);
     }
+    .alert-item.departed {
+      background: rgba(196, 186, 54, 0.08);
+      border-color: rgba(187, 162, 50, 0.712);
+      border-left-color: var(--green);
+    }
     @keyframes slide-in {
       from { transform: translateX(-12px); opacity: 0; }
       to   { transform: translateX(0);    opacity: 1; }
@@ -852,6 +857,7 @@ function confirmAddBoat() {
   const now = Date.now();
   boats.push({ id: uid(), name, dir: currentDir, segIdx, startAt: now, endAt: now + mins * 60000, alertedArrival: false });
   closeAddBoatModal();
+  logDeparture(boats[0], segIdx);
   document.getElementById('boat-name-input').value = '';
   document.getElementById('boat-minutes-input').value = 15;
   save();
@@ -896,7 +902,7 @@ function removeBoat(id) {
 function triggerAlert(boat, bridgeIdx) {
   const bridgeName = bridges[bridgeIdx]?.name ?? '?';
   const dirArrow = boat.dir !== 'west' ? '→ Ö' : '← V';
-  const msg = { id: uid(), boat: boat.name, bridge: bridgeName, dir: dirArrow, time: new Date() };
+  const msg = { id: uid(), boat: boat.name, bridge: bridgeName, dir: dirArrow, time: new Date(), isArrival: true };
   const alertSound = document.getElementById('alertSound');
   const soundOn = document.getElementById('soundOn');
   if (soundOn.checked) {
@@ -904,7 +910,20 @@ function triggerAlert(boat, bridgeIdx) {
     alertSound.play();
   }
   alerts.unshift(msg);
-  if (alerts.length > 5) alerts.pop();
+  //if (alerts.length > 5) alerts.pop();
+  renderAlerts();
+  showNotif(`⚓ ${boat.name} ankommer till ${bridgeName}`);
+  if ('Notification' in window && Notification.permission === 'granted') {
+    new Notification(`Bropassage — ${boat.name}`, { body: `Ankommer till ${bridgeName}`, icon: '⚓' });
+  }
+}
+
+function logDeparture(boat, bridgeIdx) {
+  const bridgeName = bridges[bridgeIdx]?.name ?? '?';
+  const dirArrow = boat.dir !== 'west' ? '→ Ö' : '← V';
+  const msg = { id: uid(), boat: boat.name, bridge: bridgeName, dir: dirArrow, time: new Date(), isArrival: false };
+  const alertSound = document.getElementById('alertSound');
+  alerts.unshift(msg);
   renderAlerts();
   showNotif(`⚓ ${boat.name} ankommer till ${bridgeName}`);
   if ('Notification' in window && Notification.permission === 'granted') {
@@ -917,9 +936,10 @@ function renderAlerts() {
   panel.innerHTML = '';
   alerts.forEach(a => {
     const d = document.createElement('div');
-    d.className = 'alert-item arrived';
+    d.className = `alert-item ${a.isArrival ? 'arrived' : 'departed'}`;
+    const actionText = a.isArrival ? 'ankommer till' : 'har lämnat';
     d.innerHTML = `
-      <div class="alert-text">⚓ <strong>${escHtml(a.boat)}</strong> ankommer till <strong>${escHtml(a.bridge)}</strong></div>
+      <div class="alert-text">⚓ <strong>${escHtml(a.boat)}</strong> ${actionText} <strong>${escHtml(a.bridge)}</strong></div>
       <div style="display:flex;align-items:center;gap:10px;">
         <div class="alert-time">${a.time.getHours()}:${String(a.time.getMinutes()).padStart(2,'0')}</div>
         <button onclick="dismissAlert('${a.id}')" style="background:none;border:none;color:var(--mist);font-size:14px;cursor:pointer;padding:0;line-height:1;opacity:0.5;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.5">✕</button>
