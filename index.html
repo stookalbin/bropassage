@@ -872,7 +872,7 @@ function advanceBoat(id) {
   const atEnd = isEast ? boat.segIdx >= segmentCount() - 1 : boat.segIdx <= 0;
   if (atEnd) {
     boats = boats.filter(b => b.id !== id);
-    showNotif(`⛵ ${boat.name} har lämnat kanalen`);
+    showNotif(`⛵ ${boat.name} kör vidare`);
   } else {
     boat.segIdx = isEast ? boat.segIdx + 1 : boat.segIdx - 1;
     const nextBridgeName = isEast
@@ -880,9 +880,9 @@ function advanceBoat(id) {
       : (bridges[boat.segIdx]?.name ?? 'slutet');
     const defaultTimeForNextSegment = getSegmentTime(boat.segIdx);
     const mins = parseInt(prompt(`Tid till ${nextBridgeName} (minuter)?`, String(defaultTimeForNextSegment))) || defaultTimeForNextSegment;
-    console.log(boat.segIdx);
     const now = Date.now();
     boat.startAt = now;
+    logDeparture(boat, boat.segIdx);
     boat.endAt = now + mins * 60000;
     boat.alertedArrival = false;
   }
@@ -922,13 +922,8 @@ function logDeparture(boat, bridgeIdx) {
   const bridgeName = bridges[bridgeIdx]?.name ?? '?';
   const dirArrow = boat.dir !== 'west' ? '→ Ö' : '← V';
   const msg = { id: uid(), boat: boat.name, bridge: bridgeName, dir: dirArrow, time: new Date(), isArrival: false };
-  const alertSound = document.getElementById('alertSound');
   alerts.unshift(msg);
   renderAlerts();
-  showNotif(`⚓ ${boat.name} ankommer till ${bridgeName}`);
-  if ('Notification' in window && Notification.permission === 'granted') {
-    new Notification(`Bropassage — ${boat.name}`, { body: `Ankommer till ${bridgeName}`, icon: '⚓' });
-  }
 }
 
 function renderAlerts() {
