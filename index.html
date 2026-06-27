@@ -857,7 +857,7 @@ function confirmAddBoat() {
   const now = Date.now();
   boats.push({ id: uid(), name, dir: currentDir, segIdx, startAt: now, endAt: now + mins * 60000, alertedArrival: false });
   closeAddBoatModal();
-  logDeparture(boats[0], segIdx);
+  logDeparture(boats[boats.length-1], segIdx);
   document.getElementById('boat-name-input').value = '';
   document.getElementById('boat-minutes-input').value = 15;
   save();
@@ -919,7 +919,7 @@ function triggerAlert(boat, bridgeIdx) {
 }
 
 function logDeparture(boat, bridgeIdx) {
-  const bridgeName = bridges[bridgeIdx]?.name ?? '?';
+  const bridgeName = boat.dir !== 'west' ? bridges[bridgeIdx]?.name : bridges[bridgeIdx + 1]?.name;
   const dirArrow = boat.dir !== 'west' ? '→ Ö' : '← V';
   const msg = { id: uid(), boat: boat.name, bridge: bridgeName, dir: dirArrow, time: new Date(), isArrival: false };
   alerts.unshift(msg);
