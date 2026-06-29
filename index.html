@@ -243,6 +243,8 @@
       border-radius: 3px;
     }
     .btn-advance { background: var(--green); color: #fff; }
+    .btn-ff      { background: rgba(46,110,158,0.25); color: var(--steel); border: 1px solid rgba(46,110,158,0.4); }
+    .btn-ff:hover { background: rgba(46,110,158,0.45); opacity: 1; }
     .btn-remove  { background: rgba(224,82,82,0.15); color: var(--red); border: 1px solid rgba(224,82,82,0.3); }
 
     /* ── Alerts panel ── */
@@ -442,6 +444,9 @@
   </div>
 </div>
 
+<div id="clear-logs-btn" style="display:none; margin: 0 24px 4px; text-align: right;">
+    <button class="btn-secondary btn-micro" onclick="clearAllLogs()">clear logs</button>
+</div>
 <div id="alerts-panel"></div>
 
 <div id="no-boats">Klicka på ett segment för att lägga till en båt</div>
@@ -759,6 +764,7 @@ function renderBoats(W, xOf) {
           ${timerTxt}
         </div>
         <div class="boat-actions">
+          ${!isArrived ? `<button class="button btn-micro btn-ff" onclick="fastForwardBoat('${boat.id}')" title="Snabbspola till nästa bro">⏭</button>` : ''}
           ${isArrived ? `<button class="button btn-micro btn-advance" onclick="advanceBoat('${boat.id}')">→</button>` : ''}
           <button class="button btn-micro btn-remove" onclick="removeBoat('${boat.id}')">✕</button>
         </div>
@@ -808,6 +814,10 @@ function escHtml(s) {
 
 function updateNoBoatsHint() {
   document.getElementById('no-boats').style.display = boats.length ? 'none' : 'block';
+}
+
+function updateClearLogsVisibility() {
+    document.getElementById('clear-logs-btn').style.display = alerts.length ? 'block' : 'none';
 }
 
 // ─────────────────────────────────────────────
@@ -890,6 +900,16 @@ function advanceBoat(id) {
   renderCanal();
 }
 
+function fastForwardBoat(id) {
+  const boat = boats.find(b => b.id === id);
+  if (!boat) return;
+  // Set endAt to now so remaining = 0 → boat shows ANLÄNT immediately
+  boat.endAt = Date.now();
+  boat.alertedArrival = false;
+  save();
+  renderCanal();
+}
+
 function removeBoat(id) {
   boats = boats.filter(b => b.id !== id);
   save();
@@ -941,10 +961,16 @@ function renderAlerts() {
       </div>`;
     panel.appendChild(d);
   });
+  updateClearLogsVisibility();
 }
 
 function dismissAlert(id) {
   alerts = alerts.filter(a => a.id !== id);
+  renderAlerts();
+}
+
+function clearAllLogs() {
+  alerts = [];
   renderAlerts();
 }
 
